@@ -20,6 +20,10 @@
     <string>ChromeBookmarksSpotlight.icns</string>
     <key>CFBundleIconName</key>
     <string>ChromeBookmarksSpotlight</string>
+    <key>CFBundleIconFiles</key>
+    <array>
+        <string>ChromeBookmarksSpotlight</string>
+    </array>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>LSMinimumSystemVersion</key>

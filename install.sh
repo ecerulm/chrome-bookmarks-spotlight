@@ -17,6 +17,11 @@ fi
 echo "==> Stopping any running instance"
 pkill -x "$APP_NAME" 2>/dev/null || true
 
+if [ -x "$DEST/Contents/MacOS/$APP_NAME" ]; then
+    echo "==> Clearing existing Spotlight bookmarks"
+    "$DEST/Contents/MacOS/$APP_NAME" --clear
+fi
+
 echo "==> Copying to $DEST"
 rm -rf "$DEST"
 cp -R "$SRC" "$DEST"

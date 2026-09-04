@@ -7,7 +7,10 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "ChromeBookmarksSpotlight",
-            path: "Sources/ChromeBookmarksSpotlight"
+            path: "Sources/ChromeBookmarksSpotlight",
+            linkerSettings: [
+                .linkedLibrary("sqlite3")
+            ]
         )
     ]
 )

@@ -32,9 +32,10 @@ enum SpotlightIndexer {
                 return
             }
 
-            let items = makeItems(from: bookmarks)
-            index.indexSearchableItems(items) { indexError in
-                completion(items.count, indexError)
+            makeItems(from: bookmarks) { items in
+                index.indexSearchableItems(items) { indexError in
+                    completion(items.count, indexError)
+                }
             }
         }
     }
@@ -53,38 +54,77 @@ enum SpotlightIndexer {
 
     // MARK: - Private
 
-    private static func makeItems(from bookmarks: [ChromeBookmark]) -> [CSSearchableItem] {
+    private static func makeItems(
+        from bookmarks: [ChromeBookmark],
+        completion: @escaping ([CSSearchableItem]) -> Void
+    ) {
         var seen = Set<String>()
-        var items: [CSSearchableItem] = []
+        var uniqueBookmarks: [ChromeBookmark] = []
+        var favicons: [String: ChromeFavicons] = [:]
+        let fallbackThumbnail = NSApplication.shared.applicationIconImage?.tiffRepresentation
 
         for bookmark in bookmarks {
             // De-duplicate identical URLs shared across profiles/folders.
             guard seen.insert(bookmark.url.absoluteString).inserted else { continue }
-
-            let attributes = CSSearchableItemAttributeSet(contentType: .url)
-            attributes.title = bookmark.title
-            attributes.displayName = bookmark.title
-            attributes.contentURL = bookmark.url
-            attributes.contentDescription = descriptionText(for: bookmark)
-            attributes.kind = "Chrome bookmark"
-            attributes.thumbnailData = NSApplication.shared.applicationIconImage?.tiffRepresentation
-            attributes.contentCreationDate = bookmark.dateAdded
-            attributes.lastUsedDate = bookmark.dateLastUsed
-            attributes.identifier = bookmark.url.absoluteString
-
-            var keywords = ["bookmark", "chrome", "bm"]
-            keywords.append(contentsOf: bookmark.folderPath)
-            if let host = bookmark.url.host { keywords.append(host) }
-            attributes.keywords = keywords
-
-            let item = CSSearchableItem(
-                uniqueIdentifier: identifierPrefix + bookmark.url.absoluteString,
-                domainIdentifier: domainIdentifier,
-                attributeSet: attributes
-            )
-            items.append(item)
+            uniqueBookmarks.append(bookmark)
         }
-        return items
+
+        let group = DispatchGroup()
+        var thumbnails = Array<Data?>(repeating: nil, count: uniqueBookmarks.count)
+        let lock = NSLock()
+
+        for (index, bookmark) in uniqueBookmarks.enumerated() {
+            if let cached = ChromeFavicons.cachedData(for: bookmark.url) {
+                thumbnails[index] = cached
+                continue
+            }
+
+            let favicon = favicons[bookmark.profile] ?? ChromeFavicons(profile: bookmark.profile)
+            favicons[bookmark.profile] = favicon
+            if let data = favicon.data(for: bookmark.url) {
+                ChromeFavicons.cache(data: data, for: bookmark.url)
+                thumbnails[index] = data
+                continue
+            }
+
+            group.enter()
+            ChromeFavicons.fetchFromNetwork(for: bookmark.url) { data in
+                lock.lock()
+                if let data {
+                    ChromeFavicons.cache(data: data, for: bookmark.url)
+                }
+                thumbnails[index] = data
+                lock.unlock()
+                group.leave()
+            }
+        }
+
+        group.notify(queue: .global()) {
+            var items: [CSSearchableItem] = []
+            for (index, bookmark) in uniqueBookmarks.enumerated() {
+                let attributes = CSSearchableItemAttributeSet(contentType: .data)
+                attributes.title = bookmark.title
+                attributes.displayName = bookmark.title
+                attributes.contentDescription = descriptionText(for: bookmark)
+                attributes.kind = "Chrome bookmark"
+                attributes.thumbnailData = thumbnails[index] ?? fallbackThumbnail
+                attributes.contentCreationDate = bookmark.dateAdded
+                attributes.lastUsedDate = bookmark.dateLastUsed
+                attributes.identifier = bookmark.url.absoluteString
+
+                var keywords = ["bookmark", "chrome", "bm"]
+                keywords.append(contentsOf: bookmark.folderPath)
+                if let host = bookmark.url.host { keywords.append(host) }
+                attributes.keywords = keywords
+
+                items.append(CSSearchableItem(
+                    uniqueIdentifier: identifierPrefix + bookmark.url.absoluteString,
+                    domainIdentifier: domainIdentifier,
+                    attributeSet: attributes
+                ))
+            }
+            completion(items)
+        }
     }
 
     private static func descriptionText(for bookmark: ChromeBookmark) -> String {

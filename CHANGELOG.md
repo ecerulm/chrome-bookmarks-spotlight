@@ -9,6 +9,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - Fix the Quit menu action and package the custom app icon for Finder and Spotlight results.
+- Preserve the app icon as the final Spotlight thumbnail fallback.
+
+### Added
+
+- Use Chrome's local favicon for each bookmark's Spotlight thumbnail.
+- Cache successful favicons so later reindexes do not replace them with fallbacks.
 
 ## 2026-09-03
 

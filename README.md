@@ -11,7 +11,11 @@ them to the **Core Spotlight** index, so you can find them from Spotlight
   bookmark tree (title, URL, folder path, `date_added`, `date_last_used`).
 - **`SpotlightIndexer`** — writes each bookmark as a `CSSearchableItem` in a
   private domain (`com.rlm.ChromeBookmarksSpotlight.bookmark`). Reindexing wipes
-  that domain and rewrites it, so deleted bookmarks disappear.
+  that domain and rewrites it, so deleted bookmarks disappear. Each result uses
+  Chrome's local favicon when available; the app icon identifies the source app.
+- **`ChromeFavicons`** — reads favicon image data from each profile's Chrome
+  `Favicons` SQLite database using a read-only connection and persistently caches
+  successful favicon data under Application Support.
 - **`BookmarksWatcher`** — a `DispatchSource` on each profile directory;
   when Chrome rewrites a `Bookmarks` file the index is refreshed (debounced 1.5s).
 - **`AppDelegate`** — the menu-bar UI, and the
