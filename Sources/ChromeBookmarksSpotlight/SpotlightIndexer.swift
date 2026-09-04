@@ -107,6 +107,7 @@ enum SpotlightIndexer {
                 attributes.displayName = bookmark.title
                 attributes.contentDescription = descriptionText(for: bookmark)
                 attributes.kind = "Chrome bookmark"
+                attributes.creator = "ChromeBookmarksSpotlight"
                 attributes.thumbnailData = thumbnails[index] ?? fallbackThumbnail
                 attributes.contentCreationDate = bookmark.dateAdded
                 attributes.lastUsedDate = bookmark.dateLastUsed
