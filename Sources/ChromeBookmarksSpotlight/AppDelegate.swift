@@ -81,7 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(launchAtLoginItem)
         menu.addItem(.separator())
 
-        addItem(to: menu, title: "Quit", action: #selector(NSApplication.terminate(_:)), key: "q", target: nil)
+        addItem(to: menu, title: "Quit", action: #selector(quit), key: "q")
 
         statusItem.menu = menu
     }
@@ -108,6 +108,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let url = URL(string: "chrome://bookmarks") {
             NSWorkspace.shared.open(url)
         }
+    }
+
+    @objc private func quit() {
+        NSApplication.shared.terminate(nil)
     }
 
     @objc private func toggleLaunchAtLogin() {

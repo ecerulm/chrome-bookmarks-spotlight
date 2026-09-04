@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import CoreSpotlight
 import UniformTypeIdentifiers
 
@@ -65,11 +66,13 @@ enum SpotlightIndexer {
             attributes.displayName = bookmark.title
             attributes.contentURL = bookmark.url
             attributes.contentDescription = descriptionText(for: bookmark)
+            attributes.kind = "Chrome bookmark"
+            attributes.thumbnailData = NSApplication.shared.applicationIconImage?.tiffRepresentation
             attributes.contentCreationDate = bookmark.dateAdded
             attributes.lastUsedDate = bookmark.dateLastUsed
             attributes.identifier = bookmark.url.absoluteString
 
-            var keywords = ["bookmark", "chrome"]
+            var keywords = ["bookmark", "chrome", "bm"]
             keywords.append(contentsOf: bookmark.folderPath)
             if let host = bookmark.url.host { keywords.append(host) }
             attributes.keywords = keywords

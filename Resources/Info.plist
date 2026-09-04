@@ -16,6 +16,10 @@
     <string>APPL</string>
     <key>CFBundleExecutable</key>
     <string>ChromeBookmarksSpotlight</string>
+    <key>CFBundleIconFile</key>
+    <string>ChromeBookmarksSpotlight.icns</string>
+    <key>CFBundleIconName</key>
+    <string>ChromeBookmarksSpotlight</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>LSMinimumSystemVersion</key>
