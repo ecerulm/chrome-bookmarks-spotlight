@@ -10,7 +10,9 @@ enum SpotlightSearchProbe {
         let queryString = "(title == \"*\(escaped)*\"cd || textContent == \"*\(escaped)*\"cd)"
             + " && domainIdentifier == \"\(SpotlightIndexer.domainIdentifier)\""
 
-        let query = CSSearchQuery(queryString: queryString, attributes: ["title", "contentURL"])
+        let queryContext = CSSearchQueryContext()
+        queryContext.fetchAttributes = ["title", "contentURL"]
+        let query = CSSearchQuery(queryString: queryString, queryContext: queryContext)
         var count = 0
 
         query.foundItemsHandler = { items in

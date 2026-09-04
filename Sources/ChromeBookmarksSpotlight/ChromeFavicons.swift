@@ -130,6 +130,7 @@ private func sqlite3_open_v2(
     _ vfs: UnsafePointer<CChar>?
 ) -> Int32
 
+@discardableResult
 @_silgen_name("sqlite3_close")
 private func sqlite3_close(_ database: OpaquePointer?) -> Int32
 
@@ -142,9 +143,11 @@ private func sqlite3_prepare_v2(
     _ tail: UnsafeMutablePointer<UnsafePointer<CChar>?>?
 ) -> Int32
 
+@discardableResult
 @_silgen_name("sqlite3_finalize")
 private func sqlite3_finalize(_ statement: OpaquePointer?) -> Int32
 
+@discardableResult
 @_silgen_name("sqlite3_bind_text")
 private func sqlite3_bind_text(
     _ statement: OpaquePointer?,
@@ -157,6 +160,7 @@ private func sqlite3_bind_text(
 @_silgen_name("sqlite3_step")
 private func sqlite3_step(_ statement: OpaquePointer?) -> Int32
 
+@discardableResult
 @_silgen_name("sqlite3_busy_timeout")
 private func sqlite3_busy_timeout(_ database: OpaquePointer?, _ milliseconds: Int32) -> Int32
 
