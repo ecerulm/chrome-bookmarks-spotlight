@@ -25,8 +25,9 @@ them to the **Core Spotlight** index, so you can find them from Spotlight
 ## Build & install
 
 ```sh
-./build_app.sh     # SwiftPM release build -> build/ChromeBookmarksSpotlight.app (ad-hoc signed)
-./install.sh       # copy to /Applications, register with Launch Services, launch
+just build     # SwiftPM release build -> build/ChromeBookmarksSpotlight.app (ad-hoc signed)
+just install    # copy to /Applications, register with Launch Services, launch
+just clean      # remove build artifacts
 ```
 
 Installing into `/Applications` matters: Spotlight relaunches the app by its
