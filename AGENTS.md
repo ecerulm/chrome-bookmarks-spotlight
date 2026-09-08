@@ -21,3 +21,14 @@
 - This is a macOS 13+ Swift application that indexes Google Chrome bookmarks
   in Core Spotlight.
 - Keep the bundle identifier unchanged: `com.rlm.ChromeBookmarksSpotlight`.
+
+## Spotlight Architecture
+
+- Read [`docs/spotlight-architecture.md`](docs/spotlight-architecture.md)
+  before changing Spotlight cleanup, indexing, or Results from Apps behavior.
+  It documents the separate roles of Core Spotlight, Launch Services,
+  Spotlight preference domains, `spotlightknowledged`, `corespotlightd`, and
+  the System Settings Spotlight extension.
+- The only way found to remove legacy `chrome-bookmarks-spotlight-*` entries
+  from System Settings -> Spotlight -> Results from Apps was to delete
+  `$HOME/Library/Metadata/CoreSpotlight`.

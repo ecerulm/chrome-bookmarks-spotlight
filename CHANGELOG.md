@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - Add a cleanup command for legacy app registrations and Spotlight entries.
+- Document the Core Spotlight metadata cleanup needed for legacy Results from Apps entries.
 
 ## 2026-09-04
 
