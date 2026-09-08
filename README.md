@@ -34,6 +34,20 @@ Installing into `/Applications` matters: Spotlight relaunches the app by its
 bundle identifier when you pick a result, so it needs a stable location and a
 Launch Services registration.
 
+The app's stable bundle identifier is `com.rlm.ChromeBookmarksSpotlight`. Do not
+open a build copy directly from a checkout: each old copy can be registered as
+another app by Launch Services and appear under Spotlight's **Results from
+apps** settings. To remove registrations from pre-stable builds, run:
+
+```sh
+just cleanup-legacy
+```
+
+The cleanup deletes obsolete app copies, purges legacy Core Spotlight index
+items, cleans legacy entries from Spotlight preferences, and rebuilds the Launch
+Services database. It preserves the current installation in `/Applications`.
+If an old entry remains visible in System Settings, quit and reopen System Settings.
+
 ## Menu
 
 - **N bookmarks indexed · HH:MM** — status of the last reindex

@@ -7,6 +7,7 @@
     <key>CFBundleDisplayName</key>
     <string>Chrome Bookmarks Spotlight</string>
     <key>CFBundleIdentifier</key>
+    <!-- Keep this identifier unchanged across builds so Launch Services and Spotlight see one app. -->
     <string>com.rlm.ChromeBookmarksSpotlight</string>
     <key>CFBundleVersion</key>
     <string>1</string>

@@ -1,4 +1,5 @@
 app_name := "ChromeBookmarksSpotlight"
+bundle_id := "com.rlm.ChromeBookmarksSpotlight"
 config := "release"
 app_dir := "build" / app_name + ".app"
 contents := app_dir / "Contents"
@@ -24,6 +25,12 @@ build:
 
     cp "$bin_dir/{{app_name}}" "{{contents}}/MacOS/{{app_name}}"
     cp "Resources/Info.plist" "{{contents}}/Info.plist"
+
+    actual_bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "{{contents}}/Info.plist")"
+    if [ "$actual_bundle_id" != "{{bundle_id}}" ]; then
+        echo "error: expected bundle identifier {{bundle_id}}, got $actual_bundle_id" >&2
+        exit 1
+    fi
 
     echo "==> Generating application icon"
     iconset_dir="{{contents}}/Resources/{{app_name}}.iconset"
@@ -128,3 +135,119 @@ install:
     echo
     echo "Done. Look for the bookmark icon in the menu bar."
     echo "Then search for a bookmark title in Spotlight (Cmd-Space)."
+
+# Remove old app copies, Spotlight preferences, and registrations created by pre-stable builds.
+cleanup-legacy:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    lsregister="/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister"
+
+    echo "==> Stopping any running legacy instance and System Settings"
+    pkill -x "chrome-bookmarks-spotlight" 2>/dev/null || true
+    pkill -x "System Settings" 2>/dev/null || true
+
+    echo "==> Purging legacy Core Spotlight index entries"
+    swift - <<'EOF'
+    import Foundation
+    import CoreSpotlight
+
+    let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("LegacyCleaner.app")
+    let macosDir = tmpDir.appendingPathComponent("Contents/MacOS")
+    try? FileManager.default.createDirectory(at: macosDir, withIntermediateDirectories: true)
+
+    let infoPlist = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+    <plist version="1.0">
+    <dict>
+        <key>CFBundleIdentifier</key>
+        <string>com.example.ChromeBookmarksSpotlight</string>
+        <key>CFBundleExecutable</key>
+        <string>cleaner</string>
+    </dict>
+    </plist>
+    """
+    try? infoPlist.write(to: tmpDir.appendingPathComponent("Contents/Info.plist"), atomically: true, encoding: .utf8)
+
+    let cleanerSwift = """
+    import Foundation
+    import CoreSpotlight
+    CSSearchableIndex.default().deleteAllSearchableItems { _ in exit(0) }
+    RunLoop.main.run()
+    """
+    let swiftSrc = FileManager.default.temporaryDirectory.appendingPathComponent("cleaner.swift")
+    try? cleanerSwift.write(to: swiftSrc, atomically: true, encoding: .utf8)
+
+    let binPath = macosDir.appendingPathComponent("cleaner").path
+    let buildProc = Process()
+    buildProc.executableURL = URL(fileURLWithPath: "/usr/bin/swiftc")
+    buildProc.arguments = [swiftSrc.path, "-o", binPath]
+    try? buildProc.run()
+    buildProc.waitUntilExit()
+
+    let signProc = Process()
+    signProc.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+    signProc.arguments = ["--force", "--sign", "-", tmpDir.path]
+    try? signProc.run()
+    signProc.waitUntilExit()
+
+    let runProc = Process()
+    runProc.executableURL = URL(fileURLWithPath: binPath)
+    try? runProc.run()
+    runProc.waitUntilExit()
+
+    try? FileManager.default.removeItem(at: tmpDir)
+    try? FileManager.default.removeItem(at: swiftSrc)
+    EOF
+
+    echo "==> Cleaning Spotlight preference plists"
+    /usr/bin/python3 - <<'EOF'
+    import subprocess, plistlib
+
+    for domain in ["com.apple.corespotlightui", "com.apple.Spotlight"]:
+        try:
+            raw = subprocess.check_output(["defaults", "export", domain, "-"], stderr=subprocess.DEVNULL)
+            plist = plistlib.loads(raw)
+        except Exception:
+            continue
+
+        modified = False
+        if "CSReceiverBundleIdentifierState" in plist:
+            state = plist["CSReceiverBundleIdentifierState"]
+            to_delete = [k for k in state if k.startswith("chrome-bookmarks-spotlight-") or k == "com.example.ChromeBookmarksSpotlight"]
+            for k in to_delete:
+                del state[k]
+                modified = True
+            plist["CSReceiverBundleIdentifierState"] = state
+
+        if "EnabledPreferenceRules" in plist:
+            rules = plist["EnabledPreferenceRules"]
+            new_rules = [r for r in rules if not r.startswith("chrome-bookmarks-spotlight-") and r != "com.example.ChromeBookmarksSpotlight"]
+            if len(new_rules) != len(rules):
+                plist["EnabledPreferenceRules"] = new_rules
+                modified = True
+
+        if modified:
+            new_raw = plistlib.dumps(plist, fmt=plistlib.FMT_XML)
+            p = subprocess.Popen(["defaults", "import", domain, "-"], stdin=subprocess.PIPE)
+            p.communicate(input=new_raw)
+    EOF
+
+    echo "==> Removing obsolete app copies"
+    for path in \
+        "$HOME/Applications/ChromeBookmarksSpotlight.app" \
+        "$HOME/git/personal/spotlight-chrome-bookmarks/build/ChromeBookmarksSpotlight.app" \
+        "$HOME/git/personal/spotlight-chrome-bookmarks-to-remove/build/ChromeBookmarksSpotlight.app" \
+        "{{app_dir}}"; do
+        if [ -d "$path" ]; then
+            "$lsregister" -u "$path" || true
+            rm -rf "$path"
+        fi
+    done
+
+    echo "==> Rebuilding Launch Services registrations"
+    "$lsregister" -r -domain local -domain system -domain user
+    "$lsregister" -f "{{dest}}"
+
+    echo "Legacy app copies, preferences, and index entries removed. Canonical app re-registered."
