@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - Remove stale Spotlight redonation records and lowercase legacy app copies during cleanup.
+- Index bookmark metadata before performing favicon enrichment so results appear sooner.
 
 ## 2026-09-08
 

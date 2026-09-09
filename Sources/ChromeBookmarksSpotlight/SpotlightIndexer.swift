@@ -32,11 +32,12 @@ enum SpotlightIndexer {
                 return
             }
 
-            makeItems(from: bookmarks) { items in
-                index.indexSearchableItems(items) { indexError in
-                    completion(items.count, indexError)
-                }
+            let (items, uniqueBookmarks) = makeItems(from: bookmarks)
+            index.indexSearchableItems(items) { indexError in
+                completion(items.count, indexError)
             }
+
+            enrichItems(items, bookmarks: uniqueBookmarks, in: index)
         }
     }
 
@@ -54,14 +55,9 @@ enum SpotlightIndexer {
 
     // MARK: - Private
 
-    private static func makeItems(
-        from bookmarks: [ChromeBookmark],
-        completion: @escaping ([CSSearchableItem]) -> Void
-    ) {
+    private static func makeItems(from bookmarks: [ChromeBookmark]) -> ([CSSearchableItem], [ChromeBookmark]) {
         var seen = Set<String>()
         var uniqueBookmarks: [ChromeBookmark] = []
-        var favicons: [String: ChromeFavicons] = [:]
-        let fallbackThumbnail = NSApplication.shared.applicationIconImage?.tiffRepresentation
 
         for bookmark in bookmarks {
             // De-duplicate identical URLs shared across profiles/folders.
@@ -69,62 +65,61 @@ enum SpotlightIndexer {
             uniqueBookmarks.append(bookmark)
         }
 
-        let group = DispatchGroup()
-        var thumbnails = Array<Data?>(repeating: nil, count: uniqueBookmarks.count)
-        let lock = NSLock()
+        let items = uniqueBookmarks.map { bookmark in
+            let attributes = CSSearchableItemAttributeSet(contentType: .data)
+            attributes.title = bookmark.title
+            attributes.displayName = bookmark.title
+            attributes.contentDescription = descriptionText(for: bookmark)
+            attributes.kind = "Chrome bookmark"
+            attributes.creator = "ChromeBookmarksSpotlight"
+            attributes.thumbnailData = NSApplication.shared.applicationIconImage?.tiffRepresentation
+            attributes.contentCreationDate = bookmark.dateAdded
+            attributes.lastUsedDate = bookmark.dateLastUsed
+            attributes.identifier = bookmark.url.absoluteString
 
-        for (index, bookmark) in uniqueBookmarks.enumerated() {
-            if let cached = ChromeFavicons.cachedData(for: bookmark.url) {
-                thumbnails[index] = cached
-                continue
-            }
+            var keywords = ["bookmark", "chrome", "bm"]
+            keywords.append(contentsOf: bookmark.folderPath)
+            if let host = bookmark.url.host { keywords.append(host) }
+            attributes.keywords = keywords
 
-            let favicon = favicons[bookmark.profile] ?? ChromeFavicons(profile: bookmark.profile)
-            favicons[bookmark.profile] = favicon
-            if let data = favicon.data(for: bookmark.url) {
-                ChromeFavicons.cache(data: data, for: bookmark.url)
-                thumbnails[index] = data
-                continue
-            }
-
-            group.enter()
-            ChromeFavicons.fetchFromNetwork(for: bookmark.url) { data in
-                lock.lock()
-                if let data {
-                    ChromeFavicons.cache(data: data, for: bookmark.url)
-                }
-                thumbnails[index] = data
-                lock.unlock()
-                group.leave()
-            }
+            return CSSearchableItem(
+                uniqueIdentifier: identifierPrefix + bookmark.url.absoluteString,
+                domainIdentifier: domainIdentifier,
+                attributeSet: attributes
+            )
         }
+        return (items, uniqueBookmarks)
+    }
 
-        group.notify(queue: .global()) {
-            var items: [CSSearchableItem] = []
-            for (index, bookmark) in uniqueBookmarks.enumerated() {
-                let attributes = CSSearchableItemAttributeSet(contentType: .data)
-                attributes.title = bookmark.title
-                attributes.displayName = bookmark.title
-                attributes.contentDescription = descriptionText(for: bookmark)
-                attributes.kind = "Chrome bookmark"
-                attributes.creator = "ChromeBookmarksSpotlight"
-                attributes.thumbnailData = thumbnails[index] ?? fallbackThumbnail
-                attributes.contentCreationDate = bookmark.dateAdded
-                attributes.lastUsedDate = bookmark.dateLastUsed
-                attributes.identifier = bookmark.url.absoluteString
+    private static func enrichItems(
+        _ items: [CSSearchableItem],
+        bookmarks: [ChromeBookmark],
+        in index: CSSearchableIndex
+    ) {
+        DispatchQueue.global(qos: .utility).async {
+            var favicons: [String: ChromeFavicons] = [:]
+            var enriched: [CSSearchableItem] = []
 
-                var keywords = ["bookmark", "chrome", "bm"]
-                keywords.append(contentsOf: bookmark.folderPath)
-                if let host = bookmark.url.host { keywords.append(host) }
-                attributes.keywords = keywords
+            for (item, bookmark) in zip(items, bookmarks) {
+                let url = bookmark.url
+                let data: Data?
+                if let cached = ChromeFavicons.cachedData(for: url) {
+                    data = cached
+                } else {
+                    let favicon = favicons[bookmark.profile] ?? ChromeFavicons(profile: bookmark.profile)
+                    favicons[bookmark.profile] = favicon
+                    data = favicon.data(for: url)
+                }
 
-                items.append(CSSearchableItem(
-                    uniqueIdentifier: identifierPrefix + bookmark.url.absoluteString,
-                    domainIdentifier: domainIdentifier,
-                    attributeSet: attributes
-                ))
+                guard let data else { continue }
+                ChromeFavicons.cache(data: data, for: url)
+                item.attributeSet.thumbnailData = data
+                item.isUpdate = true
+                enriched.append(item)
             }
-            completion(items)
+
+            guard !enriched.isEmpty else { return }
+            index.indexSearchableItems(enriched, completionHandler: nil)
         }
     }
 
