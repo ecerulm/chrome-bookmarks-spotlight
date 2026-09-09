@@ -94,6 +94,9 @@ build:
     rm -f "$icon_renderer" "$icon_renderer_bin"
     iconutil -c icns "$iconset_dir" -o "{{contents}}/Resources/{{app_name}}.icns"
     rm -rf "$iconset_dir"
+    # Keep the bundle icon name and icon resource in sync for Launch Services
+    # and Core Spotlight on older and newer macOS releases.
+    /usr/libexec/PlistBuddy -c "Set :CFBundleIconFile {{app_name}}" "{{contents}}/Info.plist"
     printf 'APPL????' > "{{contents}}/PkgInfo"
 
     echo "==> Ad-hoc code signing"

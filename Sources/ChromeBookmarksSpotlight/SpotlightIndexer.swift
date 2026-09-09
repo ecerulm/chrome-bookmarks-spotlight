@@ -13,6 +13,17 @@ enum SpotlightIndexer {
     /// The unique-identifier prefix carried back to us when a result is opened.
     static let identifierPrefix = "chrome-bookmark://"
 
+    /// Load the packaged icon directly. Menu-bar agents can have no
+    /// `applicationIconImage` while they are starting up.
+    private static let fallbackThumbnailData: Data? = {
+        let bundledIcon = Bundle.main.url(
+            forResource: "ChromeBookmarksSpotlight",
+            withExtension: "icns"
+        )
+        return bundledIcon.flatMap(pngData(for:))
+            ?? NSApplication.shared.applicationIconImage.flatMap(pngData(for:))
+    }()
+
     /// Replaces the whole set of indexed bookmarks with `bookmarks`.
     /// `completion` is called on an arbitrary queue with the number of items
     /// written and any error.
@@ -66,13 +77,14 @@ enum SpotlightIndexer {
         }
 
         let items = uniqueBookmarks.map { bookmark in
-            let attributes = CSSearchableItemAttributeSet(contentType: .data)
+            let attributes = CSSearchableItemAttributeSet(contentType: .url)
             attributes.title = bookmark.title
             attributes.displayName = bookmark.title
+            attributes.contentURL = bookmark.url
             attributes.contentDescription = descriptionText(for: bookmark)
             attributes.kind = "Chrome bookmark"
             attributes.creator = "ChromeBookmarksSpotlight"
-            attributes.thumbnailData = NSApplication.shared.applicationIconImage?.tiffRepresentation
+            attributes.thumbnailData = fallbackThumbnailData
             attributes.contentCreationDate = bookmark.dateAdded
             attributes.lastUsedDate = bookmark.dateLastUsed
             attributes.identifier = bookmark.url.absoluteString
@@ -129,6 +141,17 @@ enum SpotlightIndexer {
             lines.append(bookmark.folderPath.joined(separator: " / "))
         }
         return lines.joined(separator: "\n")
+    }
+
+    private static func pngData(for url: URL) -> Data? {
+        guard let image = NSImage(contentsOf: url) else { return nil }
+        return pngData(for: image)
+    }
+
+    private static func pngData(for image: NSImage) -> Data? {
+        guard let tiff = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiff) else { return nil }
+        return bitmap.representation(using: .png, properties: [:])
     }
 
     enum IndexingError: LocalizedError {
