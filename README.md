@@ -46,7 +46,11 @@ just cleanup-legacy
 The cleanup deletes obsolete app copies, purges legacy Core Spotlight index
 items, cleans legacy entries from Spotlight preferences, and rebuilds the Launch
 Services database. It preserves the current installation in `/Applications`.
-If an old entry remains visible in System Settings, quit and reopen System Settings.
+If an old entry remains visible in System Settings, quit and reopen System
+Settings. The cleanup also unregisters lowercase `chrome-bookmarks-spotlight-*.app`
+development copies and garbage-collects deleted Launch Services records. It does
+not perform a broad Launch Services rescan, since that could re-register old
+copies elsewhere in the home directory.
 
 ## Menu
 

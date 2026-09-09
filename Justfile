@@ -215,7 +215,12 @@ cleanup-legacy:
         modified = False
         if "CSReceiverBundleIdentifierState" in plist:
             state = plist["CSReceiverBundleIdentifierState"]
-            to_delete = [k for k in state if k.startswith("chrome-bookmarks-spotlight-") or k == "com.example.ChromeBookmarksSpotlight"]
+            to_delete = [
+                k for k in state
+                if k.startswith("chrome-bookmarks-spotlight-")
+                or k.startswith("ChromeBookmarksSpotlight-")
+                or k in ["ChromeBookmarksSpotlight", "com.example.ChromeBookmarksSpotlight"]
+            ]
             for k in to_delete:
                 del state[k]
                 modified = True
@@ -223,7 +228,12 @@ cleanup-legacy:
 
         if "EnabledPreferenceRules" in plist:
             rules = plist["EnabledPreferenceRules"]
-            new_rules = [r for r in rules if not r.startswith("chrome-bookmarks-spotlight-") and r != "com.example.ChromeBookmarksSpotlight"]
+            new_rules = [
+                r for r in rules
+                if not r.startswith("chrome-bookmarks-spotlight-")
+                and not r.startswith("ChromeBookmarksSpotlight-")
+                and r not in ["ChromeBookmarksSpotlight", "com.example.ChromeBookmarksSpotlight"]
+            ]
             if len(new_rules) != len(rules):
                 plist["EnabledPreferenceRules"] = new_rules
                 modified = True
@@ -234,20 +244,100 @@ cleanup-legacy:
             p.communicate(input=new_raw)
     EOF
 
+    echo "==> Removing stale Spotlight redonation records"
+    # Stop the daemon before editing its state so an in-memory copy of the
+    # stale pipeline cannot overwrite the cleaned plist during the import.
+    pkill -x "spotlightknowledged" 2>/dev/null || true
+    launchctl kill SIGTERM "gui/$(id -u)/com.apple.spotlightknowledged" 2>/dev/null || true
+    /usr/bin/python3 - <<'EOF'
+    import plistlib
+    import subprocess
+
+    prefixes = (
+        "chrome-bookmarks-spotlight-",
+        "ChromeBookmarksSpotlight-",
+    )
+
+    def is_legacy(value):
+        if not isinstance(value, str):
+            return False
+        return value.startswith(prefixes) or any(
+            value.startswith("itemsAwaitingRedonation_" + prefix)
+            for prefix in prefixes
+        )
+
+    def clean(value):
+        if isinstance(value, dict):
+            return {
+                key: clean(item)
+                for key, item in value.items()
+                if not is_legacy(key)
+            }
+        if isinstance(value, list):
+            return [clean(item) for item in value if not is_legacy(item)]
+        return value
+
+    try:
+        raw = subprocess.check_output([
+            "defaults", "export", "com.apple.spotlightknowledged.pipeline", "-"
+        ], stderr=subprocess.DEVNULL)
+        pipeline = clean(plistlib.loads(raw))
+        subprocess.run(
+            ["defaults", "import", "com.apple.spotlightknowledged.pipeline", "-"],
+            input=plistlib.dumps(pipeline, fmt=plistlib.FMT_BINARY),
+            check=True,
+        )
+        verification = subprocess.check_output([
+            "defaults", "export", "com.apple.spotlightknowledged.pipeline", "-"
+        ], stderr=subprocess.DEVNULL)
+        if any(prefix.encode() in verification for prefix in prefixes):
+            raise RuntimeError("legacy redonation state remains after cleanup")
+    except Exception:
+        # The preference domain is private and can be unavailable while its
+        # launchd service is restarting. Do not make the app cleanup fail for
+        # that race; the explicit verification below reports the result.
+        pass
+    EOF
+
+    if defaults export com.apple.spotlightknowledged.pipeline - 2>/dev/null | \
+        /usr/bin/plutil -convert xml1 -o - -- 2>/dev/null | \
+        /usr/bin/grep -qE 'chrome-bookmarks-spotlight-|ChromeBookmarksSpotlight-'; then
+        echo "warning: stale Spotlight redonation records remain" >&2
+    fi
+
+    # Force preference clients, including the Settings extension, to reload
+    # their state. These processes are supervised and will be relaunched.
+    killall cfprefsd 2>/dev/null || true
+
     echo "==> Removing obsolete app copies"
-    for path in \
-        "$HOME/Applications/ChromeBookmarksSpotlight.app" \
-        "$HOME/git/personal/spotlight-chrome-bookmarks/build/ChromeBookmarksSpotlight.app" \
-        "$HOME/git/personal/spotlight-chrome-bookmarks-to-remove/build/ChromeBookmarksSpotlight.app" \
-        "{{app_dir}}"; do
+    legacy_paths=(
+        "$HOME/Applications/ChromeBookmarksSpotlight.app"
+        "$HOME/git/personal/spotlight-chrome-bookmarks/build/ChromeBookmarksSpotlight.app"
+        "$HOME/git/personal/spotlight-chrome-bookmarks-to-remove/build/ChromeBookmarksSpotlight.app"
+        "{{app_dir}}"
+    )
+
+    # Old development builds used a lowercase, hyphenated bundle name. Find
+    # those copies as well, otherwise Launch Services keeps listing them.
+    while IFS= read -r -d '' path; do
+        legacy_paths+=("$path")
+    done < <(
+        find "$HOME" /Applications \
+            -type d -name 'chrome-bookmarks-spotlight-*.app' -print0 \
+            2>/dev/null || true
+    )
+
+    for path in "${legacy_paths[@]}"; do
         if [ -d "$path" ]; then
             "$lsregister" -u "$path" || true
             rm -rf "$path"
         fi
     done
 
-    echo "==> Rebuilding Launch Services registrations"
-    "$lsregister" -r -domain local -domain system -domain user
+    # Remove records for legacy bundles that were deleted before this cleanup.
+    "$lsregister" -gc || true
+
+    echo "==> Registering canonical installation"
     "$lsregister" -f "{{dest}}"
 
     echo "Legacy app copies, preferences, and index entries removed. Canonical app re-registered."
